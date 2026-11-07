@@ -97,10 +97,22 @@ class SwarmSentryQuorum:
         self.stability_engine = LyapunovStabilityEngine()
         self.state_history: List[Tuple[float, SwarmState]] = []
         self.current_state = SwarmState([0.05, 0.02, 0.01, 0.01])
+        from swarmsentry.extractor import StateFeatureExtractor
+        self.extractor = StateFeatureExtractor()
 
     def register_agent(self, agent_id: str):
         self.active_agents.add(agent_id)
         self.agent_drift_scores[agent_id] = 0.0
+
+    def verify_raw_action(self, sender_id: str, tool_name: str, payload: str, inter_agent_message: str = "") -> Dict[str, Any]:
+        """
+        End-to-End Entrypoint: Takes raw tool invocation / message,
+        extracts mathematical state vector Delta x, and applies Lyapunov verification.
+        """
+        extracted_delta = self.extractor.extract_state_delta(tool_name, payload, inter_agent_message)
+        result = self.verify_agent_action(sender_id, extracted_delta, f"{tool_name}: {payload[:40]}")
+        result["extracted_state_delta"] = extracted_delta
+        return result
 
     def verify_agent_action(self, sender_id: str, target_state_delta: List[float], tool_intent: str) -> Dict[str, Any]:
         """
@@ -125,9 +137,13 @@ class SwarmSentryQuorum:
 
         is_stable, delta_v, max_allowed = self.stability_engine.evaluate_transition(self.current_state, proposed_state)
 
-        # Update agent drift score
-        drift_delta = max(0.0, delta_v) * 1.5 + (0.3 if proposed_state.vec[0] > 0.6 else 0.0)
-        self.agent_drift_scores[sender_id] = self.agent_drift_scores.get(sender_id, 0.0) + drift_delta
+        # Update agent drift score only for unstable or aggressive privilege spikes
+        if not is_stable or proposed_state.vec[0] > 0.5:
+            drift_delta = max(0.0, delta_v) * 2.0 + (0.4 if proposed_state.vec[0] > 0.5 else 0.0)
+            self.agent_drift_scores[sender_id] = self.agent_drift_scores.get(sender_id, 0.0) + drift_delta
+        else:
+            # Healthy, stable transition decays drift score
+            self.agent_drift_scores[sender_id] = max(0.0, self.agent_drift_scores.get(sender_id, 0.0) - 0.05)
 
         # Check for Byzantine quarantine condition
         if self.agent_drift_scores[sender_id] >= self.drift_threshold or not is_stable:
