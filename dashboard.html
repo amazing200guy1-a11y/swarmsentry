@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwarmSentry — Autonomous Multi-Agent Lyapunov Drift Cockpit</title>
+    <style>
+        :root {
+            --bg-base: #06080d;
+            --bg-card: #0c1017;
+            --border-glow: #1a2333;
+            --accent-cyan: #00f0ff;
+            --accent-purple: #9d4edd;
+            --accent-red: #ff3366;
+            --accent-green: #00ff88;
+            --text-main: #e2e8f0;
+            --text-dim: #94a3b8;
+            --font-mono: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-mono);
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 24px 36px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-glow);
+            background: rgba(12, 16, 23, 0.85);
+            backdrop-filter: blur(12px);
+        }
+
+        .brand-cluster {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .radar-pulse {
+            width: 14px;
+            height: 14px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 16px var(--accent-cyan);
+            animation: pulse 1.8s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 0.7; }
+            50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 24px var(--accent-cyan); }
+            100% { transform: scale(0.9); opacity: 0.7; }
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .badge-live {
+            background: rgba(0, 240, 255, 0.12);
+            color: var(--accent-cyan);
+            border: 1px solid var(--accent-cyan);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        main {
+            padding: 32px 36px;
+            display: grid;
+            grid-template-columns: 2fr 1.2fr;
+            gap: 28px;
+            flex: 1;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-glow);
+            padding-bottom: 12px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+        }
+
+        .swarm-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .agent-node {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glow);
+            border-radius: 6px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: all 0.25s ease;
+        }
+
+        .agent-node.healthy {
+            border-color: rgba(0, 255, 136, 0.3);
+        }
+
+        .agent-node.quarantined {
+            border-color: rgba(255, 51, 102, 0.6);
+            background: rgba(255, 51, 102, 0.05);
+        }
+
+        .agent-name {
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .drift-bar-wrap {
+            height: 6px;
+            background: #151b26;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .drift-bar {
+            height: 100%;
+            width: 8%;
+            background: var(--accent-green);
+            transition: width 0.4s ease, background 0.4s ease;
+        }
+
+        .drift-bar.danger {
+            background: var(--accent-red);
+            width: 95%;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glow);
+            border-radius: 6px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .stat-val {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-top: 4px;
+        }
+
+        .stat-lbl {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .log-feed {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 380px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+
+        .log-item {
+            padding: 10px 12px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .log-item.alert {
+            border-left-color: var(--accent-red);
+            background: rgba(255, 51, 102, 0.06);
+        }
+
+        .btn-act {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            color: #000;
+            font-weight: 700;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: opacity 0.2s;
+        }
+
+        .btn-act:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand-cluster">
+            <div class="radar-pulse"></div>
+            <h1>SwarmSentry Cockpit</h1>
+            <span class="badge-live">LYAPUNOV STABLE (GUUB)</span>
+        </div>
+        <div style="font-size: 12px; color: var(--text-dim);">
+            Lead Dev: <strong>Usman Bamidele</strong> (FUNAAB Mathematics) • Apart Research Sprint
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <div class="card-header">
+                <span class="card-title">Multi-Agent Swarm Topology & Drift Vector</span>
+                <button class="btn-act" onclick="triggerByzantineSimulation()">Inject Byzantine Exploit</button>
+            </div>
+
+            <div class="swarm-grid">
+                <div class="agent-node healthy" id="node-orchestrator">
+                    <div class="agent-name">
+                        <span>agent_orchestrator</span>
+                        <span style="color: var(--accent-green);">HEALTHY</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Role: DAG Planning & Coordination</div>
+                    <div class="drift-bar-wrap"><div class="drift-bar" style="width: 4%;"></div></div>
+                </div>
+
+                <div class="agent-node healthy" id="node-analyzer">
+                    <div class="agent-name">
+                        <span>agent_ast_analyzer</span>
+                        <span style="color: var(--accent-green);">HEALTHY</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Role: Syntax AST Bounds Verifier</div>
+                    <div class="drift-bar-wrap"><div class="drift-bar" style="width: 6%;"></div></div>
+                </div>
+
+                <div class="agent-node healthy" id="node-writer">
+                    <div class="agent-name">
+                        <span>agent_code_writer</span>
+                        <span style="color: var(--accent-green);">HEALTHY</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Role: Sandboxed Patch Generator</div>
+                    <div class="drift-bar-wrap"><div class="drift-bar" style="width: 8%;"></div></div>
+                </div>
+
+                <div class="agent-node healthy" id="node-rogue">
+                    <div class="agent-name">
+                        <span id="rogue-name">agent_rogue_byzantine</span>
+                        <span id="rogue-status" style="color: var(--accent-green);">MONITORED</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-dim);">Role: Untrusted Third-Party Sub-Agent</div>
+                    <div class="drift-bar-wrap"><div class="drift-bar" id="rogue-bar" style="width: 12%;"></div></div>
+                </div>
+            </div>
+
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="stat-lbl">Lyapunov Energy V(x)</div>
+                    <div class="stat-val" id="val-energy">0.00318</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-lbl">Verification Latency</div>
+                    <div class="stat-val">0.018 ms</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-lbl">Quorum Convergence</div>
+                    <div class="stat-val" style="color: var(--accent-green);" id="val-quorum">100% OK</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <span class="card-title">Real-Time Invariant Audit Log</span>
+                <span style="font-size: 11px; color: var(--accent-cyan);">Zero Inference Cost</span>
+            </div>
+
+            <div class="log-feed" id="log-box">
+                <div class="log-item">[00:00.012] Quorum initialized: 4 agents registered on Lyapunov DAG.</div>
+                <div class="log-item">[00:00.018] Transition x_0 -> x_1 validated (Delta V: -0.0014 <= eps). Permitted.</div>
+                <div class="log-item">[00:00.024] AST dependency bounds verified by agent_ast_analyzer.</div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function triggerByzantineSimulation() {
+            const rogueNode = document.getElementById('node-rogue');
+            const rogueStatus = document.getElementById('rogue-status');
+            const rogueBar = document.getElementById('rogue-bar');
+            const logBox = document.getElementById('log-box');
+            const energyVal = document.getElementById('val-energy');
+            const quorumVal = document.getElementById('val-quorum');
+
+            // 1. Simulate attack
+            rogueNode.className = 'agent-node quarantined';
+            rogueStatus.innerText = 'BYZANTINE QUARANTINED';
+            rogueStatus.style.color = 'var(--accent-red)';
+            rogueBar.className = 'drift-bar danger';
+            energyVal.innerText = '0.00412';
+            quorumVal.innerText = '3/4 CONVERGED';
+
+            // 2. Add log entries
+            const alertLog = document.createElement('div');
+            alertLog.className = 'log-item alert';
+            alertLog.innerHTML = '<strong>[CRITICAL BLOCKED]</strong> agent_rogue_byzantine attempted privilege escalation (Delta V: +0.485 > eps). Inter-agent edge severed in 0.018ms!';
+            logBox.prepend(alertLog);
+
+            const isolationLog = document.createElement('div');
+            isolationLog.className = 'log-item';
+            isolationLog.innerHTML = '<strong>[QUORUM RECOVERY]</strong> Active swarm resized to 3 honest nodes. Honest workflow completed with zero deadlocks.';
+            logBox.prepend(isolationLog);
+        }
+    </script>
+</body>
+</html>
